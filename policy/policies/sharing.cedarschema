@@ -1,0 +1,37 @@
+// TRIPWIRE sharing policy schema.
+//
+// Deliberately small surface: Cedar only ever sees enough about a payload to
+// decide whether it may leave a site, never the payload's actual content.
+// A "Site" is the principal (which substation is asking to share). A
+// "Payload" is the resource being offered to the shared pattern store — it
+// carries only coarse flags (does this still contain X?) and a single
+// granularity score, never the underlying values.
+
+entity Site;
+
+entity Payload = {
+  // "raw_record"  -> untouched detector output, never leaves a site
+  // "signature"   -> abstracted shape vector, the only kind allowed to share
+  "kind": String,
+
+  // Each flag is true if the payload still carries that identifying field.
+  // These must be false for a signature to have any chance of being permitted.
+  "has_meter_id": Bool,
+  "has_consumer_id": Bool,
+  "has_raw_series": Bool,
+  "has_household_field": Bool,
+  "has_location": Bool,
+
+  // How fine-grained the payload still is. Bucketed/categorical shape
+  // descriptors keep this low; any lingering raw/high-precision field
+  // (even one that isn't a direct identifier) pushes it over the threshold.
+  // See policy/signature.py::GRANULARITY_THRESHOLD (kept in sync with the
+  // literal below by tests/test_policy_gate.py::test_threshold_matches_code).
+  "granularity": Long,
+};
+
+action "share" appliesTo {
+  principal: [Site],
+  resource: [Payload],
+  context: {}
+};

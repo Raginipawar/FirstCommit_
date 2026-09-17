@@ -1,0 +1,19 @@
+# Person 2 — Policy & Abstraction
+cedarpy>=4.12.0
+
+# Person 1 — Detection
+scikit-learn>=1.9.0
+pandas>=3.0.0
+numpy>=2.5.0
+
+# Person 3 — Orchestration & Memory
+# opensearch-py powers OpenSearchPatternStore, but LocalPatternStore (no
+# extra dependency) is what actually runs today -- see shared_store/README.md.
+opensearch-py>=3.0.0
+
+# Testing (all components)
+pytest>=8.0.0
+
+# --- Not yet pinned: real Strands-wrapped agents (needs model credentials this
+# environment doesn't have) — see orchestration/README.md, "The two remaining gaps" ---
+# strands-agents
