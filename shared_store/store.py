@@ -13,11 +13,17 @@ know or care which one is in use:
 - `OpenSearchPatternStore` — a real client against the real `opensearch-py`
   library, matching Tripwire_Execution_Doc.md's "stand up OpenSearch as
   the shared pattern store." Implemented against the genuine API, but
-  **not exercised against a live cluster in this environment** — Docker's
-  daemon isn't running here, so there was nothing to test it against.
-  Swap it in the moment a cluster is reachable (LocalStack, a real
-  OpenSearch container, or an AWS-hosted domain); no other file needs to
-  change, since both classes satisfy the same three methods.
+  **not exercised against a live cluster in this environment** — and this
+  was actually attempted, not skipped: Docker Desktop's daemon here fails
+  to start because this Windows install is itself running inside a
+  hypervisor with no nested virtualization exposed to it (`wsl --status`
+  reports "ensure virtualization is enabled in the BIOS", and `systeminfo`
+  confirms a hypervisor is already present) — a host-level constraint, not
+  a missing `docker desktop start`. See `../orchestration/README.md`,
+  "Gap 2," for the full account. Swap it in the moment a cluster is
+  reachable (LocalStack, a real OpenSearch container, or an AWS-hosted
+  domain, on a host where that's actually possible); no other file needs
+  to change, since both classes satisfy the same three methods.
 
 Only ever index signatures that already cleared `PolicyGate.evaluate_share_request`
 (`decision.allowed is True`) — neither implementation re-checks that, by

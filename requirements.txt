@@ -14,6 +14,16 @@ opensearch-py>=3.0.0
 # Testing (all components)
 pytest>=8.0.0
 
-# --- Not yet pinned: real Strands-wrapped agents (needs model credentials this
-# environment doesn't have) — see orchestration/README.md, "The two remaining gaps" ---
-# strands-agents
+# Live backend for the site's "Live Run" section (server.py) — wraps the
+# real pipeline above in two HTTP endpoints, no mocking, see server.py
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Real Strands-wrapped orchestration (orchestration/strands_agent.py,
+# scripts/run_strands_swarm.py) — backed by a local Ollama model, since this
+# environment has no cloud model credentials. Also needs, one time:
+#   winget install --id Ollama.Ollama -e
+#   ollama pull qwen2.5:1.5b
+strands-agents>=1.0.0
+strands-agents-tools>=1.0.0
+ollama>=0.4.0

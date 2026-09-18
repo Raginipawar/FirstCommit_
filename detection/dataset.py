@@ -4,21 +4,26 @@ Yang, Niu, Dai, Zhou — IEEE Trans. Industrial Informatics), split into
 synthetic sites the way Tripwire_Execution_Doc.md's Person 1 task calls for:
 "Split SGCC dataset into 3-4 synthetic sites, uneven data volume."
 
-Why synthetic and not the real Kaggle download
-------------------------------------------------
-Pulling the real dataset (kaggle.com/datasets/bensalem14/sgcc-dataset)
-needs an authenticated Kaggle API key, which isn't configured in this
-environment. Rather than block on that, this module generates data with
-the same shape and the same theft-signature vocabulary the execution doc
-describes (a load drop at a billing boundary, a tamper-consistent shape,
-sustained or partially-recovering) so the rest of the pipeline — detector,
-policy gate, pooled re-check — is fully buildable and testable now.
+Why synthetic, and how this relates to the real dataset
+----------------------------------------------------------
+This module was written before the real dataset was downloaded, to avoid
+blocking the rest of the pipeline on a Kaggle API key. The real dataset
+has since been downloaded and is now used by a **separate, parallel** set
+of modules -- `real_dataset.py`, `real_features.py`, `real_detector.py`,
+`real_pipeline.py` -- not by filling in `load_real_sgcc()` below. See
+`detection/README.md`, "The real-data path," for exactly why: the real
+data needed a different detector (supervised, not this module's
+unsupervised-forest-compatible `Consumer` shape) and different bucket
+scales (~1,034 days vs. this module's 120), so reshaping it into this
+module's `Consumer` dataclass wasn't the right move. This synthetic
+generator stays in active use -- it's fast, deterministic, and a clean
+first story (see `scripts/run_isolated_vs_pooled.py`) -- alongside the
+real-data path, not replaced by it.
 
-`load_real_sgcc()` below is a documented placeholder: once a teammate has
-Kaggle credentials, implement it to read the real CSV and reshape it into
-the same `Consumer` records this module already produces, and nothing
-downstream (detector.py, baseline.py, pooled_recheck.py) needs to change.
-Swapping the data source is a one-function change, by design.
+`load_real_sgcc()` below is left as a placeholder/`NotImplementedError`
+on purpose: it would only be worth implementing if something specifically
+needed the real data reshaped into *this* module's `Consumer`/isolation-
+forest-oriented shape, which nothing currently does.
 
 Site layout (uneven volume, per the execution doc)
 ----------------------------------------------------
