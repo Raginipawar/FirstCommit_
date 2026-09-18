@@ -359,7 +359,14 @@ function SwarmPanel({ swarm }: { swarm: SwarmResult }) {
   return (
     <div className="rounded-2xl border border-line p-6 sm:p-8" style={{ background: 'var(--c-surface)' }}>
       <div className="flex items-baseline justify-between">
-        <p className="tag">The pool, live</p>
+        <div>
+          <p className="tag">The pool, live</p>
+          {swarm.seed_offset !== undefined && (
+            <p className="mt-1 font-mono text-[0.65rem] text-faint">
+              seed +{swarm.seed_offset} · a new dataset every run
+            </p>
+          )}
+        </div>
         <p className="font-display text-2xl">
           {swarm.pool_size}{' '}
           <span className="text-sm text-faint">signatures pooled</span>

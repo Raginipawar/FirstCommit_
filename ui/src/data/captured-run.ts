@@ -121,6 +121,7 @@ export const CAPTURED_SWARM: SwarmResult = {
     },
   },
   pool_size: 93,
+  seed_offset: 0,
 }
 
 // A real response from /api/decisions, captured the same session — the

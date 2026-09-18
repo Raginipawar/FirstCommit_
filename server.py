@@ -7,9 +7,13 @@ modules `scripts/demo_block_then_pass.py` and `scripts/run_isolated_vs_pooled.py
 call — the real Cedar policy gate, the real IsolationForest detector, the
 real drift filter, the real pooled re-check. Nothing here is pre-recorded.
 Every request re-runs the pipeline from scratch and returns whatever it
-actually produced, which — because `detection/dataset.py` seeds its
-per-site random generators — will be the same real numbers the README
-documents, every time, unless the underlying detection code changes.
+actually produced. /api/run/gate always evaluates the same fixed
+MOCK_ANOMALY fixture, so its three decisions are stable run to run. The
+swarm-cycle endpoints (/api/run/swarm, /api/run/swarm/stream) draw a fresh
+random seed offset every call (see `_randomized_configs`) so each click
+of "Run TRIPWIRE now" generates a genuinely new synthetic dataset instead
+of replaying the README's one fixed-seed number; the response's
+`seed_offset` makes any individual run reproducible on request.
 
 Run from the tripwire/ directory:
 
@@ -24,6 +28,7 @@ http://localhost:8000.
 from __future__ import annotations
 
 import json
+import random
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -106,6 +111,17 @@ def _share_dict(r: ShareRoundResult) -> dict[str, Any]:
     }
 
 
+def _randomized_configs() -> tuple[tuple[Any, ...], int]:
+    """A fresh random seed offset applied to every site, so 'Run TRIPWIRE
+    now' produces a genuinely new dataset each click instead of the same
+    fixed-seed numbers every time. The offset is returned alongside the
+    configs so the response can say exactly which run this was —
+    reproducible on request (same offset -> same result), not hidden."""
+    offset = random.randint(0, 1_000_000)
+    configs = tuple(replace(c, seed=c.seed + offset) for c in SITE_CONFIGS)
+    return configs, offset
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "tripwire-live"}
@@ -174,10 +190,11 @@ def run_swarm() -> dict[str, Any]:
         gate = PolicyGate(log_file=Path(tmp) / "decisions.jsonl")
         store = LocalPatternStore(Path(tmp) / "pool.jsonl")
 
-        result = run_swarm_cycle(gate, store)
+        configs, seed_offset = _randomized_configs()
+        result = run_swarm_cycle(gate, store, configs)
 
         sites = {}
-        for config in SITE_CONFIGS:
+        for config in configs:
             site_id = config.site_id
             sites[site_id] = {
                 "n_consumers": config.n_consumers,
@@ -188,7 +205,7 @@ def run_swarm() -> dict[str, Any]:
                 "share": _share_dict(result.share_results[site_id]),
             }
 
-        return {"sites": sites, "pool_size": result.pool_size}
+        return {"sites": sites, "pool_size": result.pool_size, "seed_offset": seed_offset}
 
 
 def _sse(event: dict[str, Any]) -> str:
@@ -205,14 +222,15 @@ def run_swarm_stream() -> StreamingResponse:
     orchestration/agent.py::SiteAgent, not a scripted delay."""
 
     def events() -> Iterator[str]:
+        configs, seed_offset = _randomized_configs()
         with tempfile.TemporaryDirectory() as tmp:
             gate = PolicyGate(log_file=Path(tmp) / "decisions.jsonl")
             store = LocalPatternStore(Path(tmp) / "pool.jsonl")
 
-            sites_data = generate_all_sites(SITE_CONFIGS)
+            sites_data = generate_all_sites(configs)
             agents = {
                 c.site_id: SiteAgent(c, sites_data[c.site_id], gate, store)
-                for c in SITE_CONFIGS
+                for c in configs
             }
 
             isolated_metrics = {}
@@ -250,7 +268,7 @@ def run_swarm_stream() -> StreamingResponse:
                 )
 
             sites_out = {}
-            for config in SITE_CONFIGS:
+            for config in configs:
                 site_id = config.site_id
                 sites_out[site_id] = {
                     "n_consumers": config.n_consumers,
@@ -264,7 +282,11 @@ def run_swarm_stream() -> StreamingResponse:
             yield _sse(
                 {
                     "phase": "done",
-                    "result": {"sites": sites_out, "pool_size": store.count()},
+                    "result": {
+                        "sites": sites_out,
+                        "pool_size": store.count(),
+                        "seed_offset": seed_offset,
+                    },
                 }
             )
 

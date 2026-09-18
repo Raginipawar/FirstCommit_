@@ -47,6 +47,7 @@ export type SwarmSite = {
 export type SwarmResult = {
   sites: Record<'site_a' | 'site_b' | 'site_c_low_data', SwarmSite>
   pool_size: number
+  seed_offset?: number
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
