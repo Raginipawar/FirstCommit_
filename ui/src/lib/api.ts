@@ -2,7 +2,11 @@
 // same detection/policy/orchestration modules the CLI scripts use and
 // re-runs them fresh on every call. Nothing here is a mock endpoint.
 
-const API_BASE = 'http://localhost:8000'
+// In production this is served from the same origin as the API (Nginx
+// reverse-proxies /api/* to Uvicorn on the same box), so requests stay
+// relative and same-origin -- no CORS, no hardcoded host. In dev, Vite
+// runs on a different port than server.py, so it needs the explicit host.
+const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:8000'
 
 export type PolicyDecision = {
   allowed: boolean
