@@ -30,7 +30,10 @@ export type GateResult = {
 export type SiteMetrics = {
   total_consumers: number
   total_theft: number
+  flagged: number
+  true_positives: number
   detection_rate: number
+  precision: number
   false_positive_rate: number
 }
 
@@ -38,7 +41,7 @@ export type SwarmSite = {
   n_consumers: number
   isolated: SiteMetrics
   pooled: SiteMetrics
-  share: { flagged: number; drift_candidates: number; shared: number }
+  share: { flagged: number; drift_candidates: number; shared: number; denied: number; skipped: number }
 }
 
 export type SwarmResult = {
@@ -78,4 +81,124 @@ export async function runSwarm(): Promise<SwarmResult> {
   const res = await fetch(`${API_BASE}/api/run/swarm`, { method: 'POST' })
   if (!res.ok) throw new Error(`swarm run failed: ${res.status}`)
   return res.json()
+}
+
+// --- Decision log / audit trail --------------------------------------
+
+export type DecisionRecord = {
+  checked_at: string
+  decision: string
+  allowed: boolean
+  site_id: string
+  resource_id: string
+  kind: string
+  granularity: number
+  reasons: string[]
+}
+
+export type DecisionSummary = {
+  total: number
+  allowed: number
+  denied: number
+  allow_rate: number
+  by_site: Record<string, number>
+  denial_reasons: Record<string, number>
+}
+
+export type DecisionsResult = {
+  records: DecisionRecord[]
+  summary: DecisionSummary
+}
+
+export async function getDecisions(): Promise<DecisionsResult> {
+  const res = await fetch(`${API_BASE}/api/decisions`)
+  if (!res.ok) throw new Error(`decisions fetch failed: ${res.status}`)
+  return res.json()
+}
+
+export async function clearDecisions(): Promise<void> {
+  await fetch(`${API_BASE}/api/decisions/clear`, { method: 'POST' })
+}
+
+// --- Live pipeline stream (SSE) ---------------------------------------
+
+export type PipelineEvent =
+  | { phase: 'detect'; site_id: string; flagged: number }
+  | { phase: 'share'; site_id: string; drift_candidates: number; shared: number; denied: number }
+  | { phase: 'recheck'; site_id: string; pooled_flagged: number }
+  | { phase: 'done'; result: SwarmResult }
+
+export function streamSwarm(
+  onEvent: (e: PipelineEvent) => void,
+  onError: (err: unknown) => void,
+): () => void {
+  const source = new EventSource(`${API_BASE}/api/run/swarm/stream`)
+  source.onmessage = (msg) => {
+    try {
+      const parsed = JSON.parse(msg.data) as PipelineEvent
+      onEvent(parsed)
+      if (parsed.phase === 'done') source.close()
+    } catch (err) {
+      onError(err)
+      source.close()
+    }
+  }
+  source.onerror = (err) => {
+    onError(err)
+    source.close()
+  }
+  return () => source.close()
+}
+
+// --- Multi-seed validation (SSE) ---------------------------------------
+
+export type SeedRecord = {
+  seed_offset: number
+  sites: Record<
+    string,
+    {
+      isolated_detection_rate: number
+      pooled_detection_rate: number
+      improvement: number
+      isolated_false_positive_rate: number
+      pooled_false_positive_rate: number
+    }
+  >
+  low_data_improvement: number
+}
+
+export type ValidationAggregate = {
+  n_seeds: number
+  low_data_site: string
+  mean_improvement: number
+  min_improvement: number
+  max_improvement: number
+  false_positive_rate_ever_worse_pooled: boolean
+}
+
+export type ValidationEvent =
+  | ({ phase: 'seed' } & SeedRecord)
+  | { phase: 'done'; per_seed: SeedRecord[]; aggregate: ValidationAggregate }
+
+export function streamValidation(
+  nSeeds: number,
+  onEvent: (e: ValidationEvent) => void,
+  onError: (err: unknown) => void,
+): () => void {
+  const source = new EventSource(`${API_BASE}/api/validate/stream?n_seeds=${nSeeds}`)
+  source.onmessage = (msg) => {
+    try {
+      const parsed = JSON.parse(msg.data) as ValidationEvent
+      onEvent(parsed)
+      if (parsed.phase === 'done') source.close()
+    } catch (err) {
+      onError(err)
+      source.close()
+    }
+  }
+  source.onerror = (err) => {
+    onError(err)
+    source.close()
+  }
+  return () => source.close()
 }
