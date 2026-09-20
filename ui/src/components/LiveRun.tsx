@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Reveal } from './Reveal'
 import { DecisionLog } from './DecisionLog'
-import { Caveats } from './Caveats'
 import { PipelineDiagram } from './PipelineDiagram'
 import { Validation } from './Validation'
 import {
@@ -273,8 +272,6 @@ export function LiveRun() {
         <div className="mt-6">
           <Validation online={!!online} />
         </div>
-
-        <Caveats />
       </div>
     </section>
   )
