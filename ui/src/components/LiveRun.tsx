@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Reveal } from './Reveal'
+import { DecisionLog } from './DecisionLog'
+import { PipelineDiagram } from './PipelineDiagram'
+import { Validation } from './Validation'
 import {
   checkBackendOnline,
+  getDecisions,
   runGate,
-  runSwarm,
+  streamSwarm,
+  type DecisionsResult,
   type GateResult,
+  type PipelineEvent,
   type SwarmResult,
 } from '../lib/api'
-import { CAPTURED_GATE, CAPTURED_SWARM } from '../data/captured-run'
+import { SITE_LABEL, pct } from '../lib/format'
+import { CAPTURED_DECISIONS, CAPTURED_GATE, CAPTURED_SWARM } from '../data/captured-run'
 
 type Phase = 'idle' | 'running' | 'done'
 type Source = 'live' | 'captured' | 'fallback'
@@ -21,18 +28,32 @@ const RUNNING_LINES = [
   'Re-checking each site against the shared pool…',
 ]
 
-const SITE_LABEL: Record<string, string> = {
-  site_a: 'Site A',
-  site_b: 'Site B',
-  site_c_low_data: 'Site C, low data',
-}
-
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-function pct(n: number) {
-  return `${(n * 100).toFixed(1)}%`
+function syntheticEvents(swarm: SwarmResult): PipelineEvent[] {
+  const order: (keyof typeof swarm.sites)[] = ['site_a', 'site_b', 'site_c_low_data']
+  const events: PipelineEvent[] = []
+  for (const id of order) {
+    const site = swarm.sites[id]
+    events.push({ phase: 'detect', site_id: id, flagged: site.share.flagged })
+  }
+  for (const id of order) {
+    const site = swarm.sites[id]
+    events.push({
+      phase: 'share',
+      site_id: id,
+      drift_candidates: site.share.drift_candidates,
+      shared: site.share.shared,
+      denied: site.share.denied ?? 0,
+    })
+  }
+  for (const id of order) {
+    const site = swarm.sites[id]
+    events.push({ phase: 'recheck', site_id: id, pooled_flagged: site.pooled.flagged })
+  }
+  return events
 }
 
 export function LiveRun() {
@@ -41,6 +62,8 @@ export function LiveRun() {
   const [source, setSource] = useState<Source>('captured')
   const [gate, setGate] = useState<GateResult | null>(null)
   const [swarm, setSwarm] = useState<SwarmResult | null>(null)
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([])
+  const [decisions, setDecisions] = useState<DecisionsResult | null>(null)
   const [line, setLine] = useState(0)
   const tickRef = useRef<number | null>(null)
 
@@ -62,27 +85,48 @@ export function LiveRun() {
     }
   }, [phase])
 
+  async function refreshDecisions() {
+    if (!online) return
+    try {
+      setDecisions(await getDecisions())
+    } catch {
+      /* leave whatever was showing */
+    }
+  }
+
   async function handleRun() {
     setPhase('running')
-    const started = performance.now()
+    setPipelineEvents([])
     try {
       if (online) {
-        const [g, s] = await Promise.all([runGate(), runSwarm()])
-        const elapsed = performance.now() - started
-        if (elapsed < 1100) await sleep(1100 - elapsed)
+        const swarmPromise = new Promise<SwarmResult>((resolve, reject) => {
+          streamSwarm(
+            (e) => {
+              setPipelineEvents((prev) => [...prev, e])
+              if (e.phase === 'done') resolve(e.result)
+            },
+            reject,
+          )
+        })
+        const [g, s] = await Promise.all([runGate(), swarmPromise])
         setGate(g)
         setSwarm(s)
         setSource('live')
+        setDecisions(await getDecisions())
       } else {
         await sleep(1300)
         setGate(CAPTURED_GATE)
         setSwarm(CAPTURED_SWARM)
+        setPipelineEvents(syntheticEvents(CAPTURED_SWARM))
+        setDecisions(CAPTURED_DECISIONS)
         setSource('captured')
       }
     } catch {
       await sleep(400)
       setGate(CAPTURED_GATE)
       setSwarm(CAPTURED_SWARM)
+      setPipelineEvents(syntheticEvents(CAPTURED_SWARM))
+      setDecisions(CAPTURED_DECISIONS)
       setSource('fallback')
     }
     setPhase('done')
@@ -208,13 +252,26 @@ export function LiveRun() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-16 grid gap-6 lg:grid-cols-[1fr_1.15fr] lg:gap-8"
+              className="mt-16"
             >
-              <GatePanel gate={gate} />
-              <SwarmPanel swarm={swarm} />
+              <div className="grid gap-6 lg:grid-cols-[1fr_1.15fr] lg:gap-8">
+                <GatePanel gate={gate} />
+                <SwarmPanel swarm={swarm} />
+              </div>
+
+              <PipelineDiagram events={pipelineEvents} active={false} />
+              <DecisionLog data={decisions} online={!!online} onCleared={refreshDecisions} />
             </motion.div>
           )}
         </AnimatePresence>
+
+        {phase === 'running' && pipelineEvents.length > 0 && (
+          <PipelineDiagram events={pipelineEvents} active />
+        )}
+
+        <div className="mt-6">
+          <Validation online={!!online} />
+        </div>
       </div>
     </section>
   )
@@ -299,7 +356,14 @@ function SwarmPanel({ swarm }: { swarm: SwarmResult }) {
   return (
     <div className="rounded-2xl border border-line p-6 sm:p-8" style={{ background: 'var(--c-surface)' }}>
       <div className="flex items-baseline justify-between">
-        <p className="tag">The pool, live</p>
+        <div>
+          <p className="tag">The pool, live</p>
+          {swarm.seed_offset !== undefined && (
+            <p className="mt-1 font-mono text-[0.65rem] text-faint">
+              seed +{swarm.seed_offset} · a new dataset every run
+            </p>
+          )}
+        </div>
         <p className="font-display text-2xl">
           {swarm.pool_size}{' '}
           <span className="text-sm text-faint">signatures pooled</span>
