@@ -11,7 +11,7 @@ A low-data utility catches **2x more theft** - without any utility ever seeing a
 
 <br/>
 
-[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-Click_to_run_it_yourself-B5581F?style=for-the-badge&labelColor=0B1120)](http://ec2-15-252-238-122.ap-south-1.compute.amazonaws.com/)
+[![Live Demo](https://img.shields.io/badge/LIVE_DEMO-Click_to_run_it_yourself-B5581F?style=for-the-badge&labelColor=0B1120)](https://15-252-238-122.nip.io/)
 
 <br/>
 
@@ -43,8 +43,8 @@ A low-data utility catches **2x more theft** - without any utility ever seeing a
 
 <div align="center">
 
-### [**Run it live, right now**](http://ec2-15-252-238-122.ap-south-1.compute.amazonaws.com/)
-
+### [**Run it live, right now**](https://15-252-238-122.nip.io/)
+### [**Youtube vid link**](https://youtu.be/jwsd3ReR8yg?si=d4X8gjVSc-hLvx1N)
 *Nothing on that page is a recording. Every button re-runs the real pipeline.*
 
 </div>
